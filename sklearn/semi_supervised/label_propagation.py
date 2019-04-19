@@ -201,7 +201,7 @@ class BaseLabelPropagation(BaseEstimator, ClassifierMixin, metaclass=ABCMeta):
         probabilities /= normalizer
         return probabilities
 
-    def fit(self, X, y):
+    def fit(self, X, y_label_distributions):
         """Fit a semi-supervised label propagation model based
 
         All the input data is provided matrix X (labeled and unlabeled)
@@ -221,33 +221,45 @@ class BaseLabelPropagation(BaseEstimator, ClassifierMixin, metaclass=ABCMeta):
         -------
         self : returns an instance of self.
         """
-        X, y = check_X_y(X, y)
+        # X, y = check_X_y(X, y)
         self.X_ = X
-        check_classification_targets(y)
+        # check_classification_targets(y)
+
+        n_samples, n_classes = y_label_distributions.shape
 
         # actual graph construction (implementations should override this)
         graph_matrix = self._build_graph()
 
         # label construction
         # construct a categorical distribution for classification only
-        classes = np.unique(y)
-        classes = (classes[classes != -1])
+        # classes = np.unique(y)
+        # classes = (classes[classes != -1])
+        classes = list(range(n_classes))
+        classes = np.asarray(classes)
         self.classes_ = classes
 
-        n_samples, n_classes = len(y), len(classes)
+        # n_samples, n_classes = len(y), len(classes)
 
         alpha = self.alpha
         if self._variant == 'spreading' and \
                 (alpha is None or alpha <= 0.0 or alpha >= 1.0):
             raise ValueError('alpha=%s is invalid: it must be inside '
                              'the open interval (0, 1)' % alpha)
-        y = np.asarray(y)
-        unlabeled = y == -1
+        # y = np.asarray(y)
+        # unlabeled = y == -1
 
         # initialize distributions
         self.label_distributions_ = np.zeros((n_samples, n_classes))
-        for label in classes:
-            self.label_distributions_[y == label, classes == label] = 1
+        # for label in classes:
+        #     self.label_distributions_[y == label, classes == label] = 1
+        unlabeled = []
+        for i, y in enumerate(y_label_distributions):
+            if np.sum(y==-1)==n_classes:
+                unlabeled.append(True)
+            else:
+                unlabeled.append(False)
+                self.label_distributions_[i] = y_label_distributions[i]
+        unlabeled = np.asarray(unlabeled)
 
         y_static = np.copy(self.label_distributions_)
         if self._variant == 'propagation':
@@ -293,8 +305,8 @@ class BaseLabelPropagation(BaseEstimator, ClassifierMixin, metaclass=ABCMeta):
         self.label_distributions_ /= normalizer
 
         # set the transduction item
-        transduction = self.classes_[np.argmax(self.label_distributions_,
-                                               axis=1)]
+        idx = np.argmax(self.label_distributions_,axis=1)
+        transduction = self.classes_[idx]
         self.transduction_ = transduction.ravel()
         return self
 
