@@ -71,6 +71,8 @@ from ..utils.multiclass import check_classification_targets
 from ..utils.validation import check_X_y, check_is_fitted, check_array
 from ..exceptions import ConvergenceWarning
 
+import numpy as np
+from scipy.sparse import csr_matrix
 
 class BaseLabelPropagation(BaseEstimator, ClassifierMixin, metaclass=ABCMeta):
     """Base class for label propagation module.
@@ -276,6 +278,8 @@ class BaseLabelPropagation(BaseEstimator, ClassifierMixin, metaclass=ABCMeta):
             graph_matrix = graph_matrix.tocsr()
 
         for self.n_iter_ in range(self.max_iter):
+            print('label spreading iteration: %d' % self.n_iter_)
+
             if np.abs(self.label_distributions_ - l_previous).sum() < self.tol:
                 break
 
@@ -503,12 +507,17 @@ class LabelSpreading(BaseLabelPropagation):
     _variant = 'spreading'
 
     def __init__(self, kernel='rbf', gamma=20, n_neighbors=7, alpha=0.2,
-                 max_iter=30, tol=1e-3, n_jobs=None):
+                 max_iter=30, tol=1e-3, n_jobs=None, features1=None, features2=None):
 
         # this one has different base parameters
         super().__init__(kernel=kernel, gamma=gamma,
                          n_neighbors=n_neighbors, alpha=alpha,
                          max_iter=max_iter, tol=tol, n_jobs=n_jobs)
+
+        self.features1 = features1
+        self.features2 = features2
+
+        # self.corpus = corpus
 
     def _build_graph(self):
         """Graph matrix for Label Spreading computes the graph laplacian"""
@@ -516,7 +525,8 @@ class LabelSpreading(BaseLabelPropagation):
         if self.kernel == 'knn':
             self.nn_fit = None
         n_samples = self.X_.shape[0]
-        affinity_matrix = self._get_kernel(self.X_)
+        affinity_matrix = self._get_kernel (self.X_)
+        # affinity_matrix = self._my_get_kernel ()
         laplacian = csgraph.laplacian(affinity_matrix, normed=True)
         laplacian = -laplacian
         if sparse.isspmatrix(laplacian):
@@ -525,3 +535,41 @@ class LabelSpreading(BaseLabelPropagation):
         else:
             laplacian.flat[::n_samples + 1] = 0.0  # set diag to 0.0
         return laplacian
+
+    def _my_get_kernel(self):
+        # [n_samples, n_features] -> [n_samples, n_samples]
+        # Compressed Sparse Row matrix
+
+        n_samples, _ = self.features1.shape
+        # n_samples = self.X_.shape[0]
+
+        nn_fit1 = NearestNeighbors(self.n_neighbors, n_jobs=self.n_jobs).fit(self.X_)
+        nn_fit2 = NearestNeighbors(self.n_neighbors, n_jobs=self.n_jobs).fit(self.features2)
+        affinity_matrix = csr_matrix((n_samples, n_samples), dtype=np.float)
+
+        _, indices1 = nn_fit1.kneighbors(self.X_, n_neighbors=self.n_neighbors)
+        _, indices2 = nn_fit2.kneighbors(self.features2, n_neighbors=self.n_neighbors)
+
+        # from nltk.sentiment.vader import SentimentIntensityAnalyzer
+        # import operator
+        # sid = SentimentIntensityAnalyzer()
+
+
+        for elem in indices1:
+            i = elem[0]
+            # center = sid.polarity_scores(self.corpus[i])
+            # center_label = max(center.items(), key=operator.itemgetter(1))[0]
+            for j in elem[1:]:
+                # neighbor = sid.polarity_scores(self.corpus[j])
+                # neighbor_label = max(neighbor.items(), key=operator.itemgetter(1))[0]
+                # if center_label==neighbor_label:
+                affinity_matrix[i,j] = 1.0
+
+        for elem in indices2:
+            i = elem[0]
+            for j in elem[1:]:
+                affinity_matrix[i,j] = 1.0
+
+        return affinity_matrix
+
+

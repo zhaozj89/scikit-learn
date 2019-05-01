@@ -179,7 +179,13 @@ def accuracy_score(y_true, y_pred, normalize=True, sample_weight=None):
         differing_labels = count_nonzero(y_true - y_pred, axis=1)
         score = differing_labels == 0
     else:
-        score = y_true == y_pred
+        score = []
+        for i, v1 in enumerate(y_true):
+            if int(v1)==int(y_pred[i]):
+                score.append(True)
+            else:
+                score.append(False)
+        # score = (y_true.ravel() == y_pred.ravel())
 
     return _weighted_sum(score, sample_weight, normalize)
 
